@@ -178,9 +178,6 @@ const styles: ComponentStyles<ButtonClassNameContract, DesignSystem> = (
             justifyContent: "flex-start",
         },
         button__stealth: {
-            minWidth: "32px",
-            maxWidth: "unset",
-            padding: "0",
             background: neutralFillStealthRest,
             "&:hover:enabled": {
                 backgroundColor: neutralFillStealthHover,
