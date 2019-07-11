@@ -1,8 +1,11 @@
 import { ComponentStyles, ManagedClasses } from "@microsoft/fast-jss-manager";
-import { mergeWith } from "lodash-es";
+
+import { DesignSystem } from "./design-system-provider";
+import { JSXElement } from "@babel/types";
 import React from "react";
-import { designSystemContext } from "./context";
 import SheetManager from "./sheet-manager";
+import { designSystemContext } from "./context";
+import { mergeWith } from "lodash-es";
 
 /**
  * Describes an interface for adjusting a styled component
@@ -56,6 +59,10 @@ abstract class JSSManager<T, S, C> extends React.Component<ManagedJSSProps<T, S,
      */
 
     public static contextType: React.Context<unknown> = designSystemContext;
+
+    public static designSystemSet: Set<any> = new Set();
+    public static designSystemIndexes: number[] = [];
+
     /**
      * JSS allows us to use an index to order the created style elements. The higher the index,
      * the later in the document the style element will be created.
@@ -102,7 +109,7 @@ abstract class JSSManager<T, S, C> extends React.Component<ManagedJSSProps<T, S,
      * are not accessible in the constructor,  we need to compile styles
      * inside the first call of the render function
      */
-    private hasCreatedIntialStyleSheets: boolean = false;
+    private hasCreatedInitialStyleSheets: boolean = false;
 
     /**
      * Store the design-system as an instance property because
@@ -116,25 +123,44 @@ abstract class JSSManager<T, S, C> extends React.Component<ManagedJSSProps<T, S,
 
         this.index = JSSManager.index -= 1;
         this.designSystem = context;
+
+        // Store root indexes for different Design Systems.
+        if (!JSSManager.designSystemSet.has(this.designSystem)) {
+            JSSManager.designSystemSet.add(this.designSystem);
+            JSSManager.designSystemIndexes.push(this.index);
+        }
     }
 
     public render(): JSX.Element {
-        if (!this.hasCreatedIntialStyleSheets) {
+        if (!this.hasCreatedInitialStyleSheets) {
             if (!!this.styles) {
-                JSSManager.sheetManager.add(this.styles, this.designSystem, {
-                    meta: this.managedComponent.displayName || this.managedComponent.name,
-                    index: this.index,
-                });
+                JSSManager.sheetManager.add(
+                    this.styles,
+                    this.designSystem,
+                    {
+                        meta:
+                            this.managedComponent.displayName ||
+                            this.managedComponent.name,
+                        index: this.index,
+                    },
+                    false
+                );
             }
 
             if (this.props.jssStyleSheet) {
                 this.createPropStyleSheet();
             }
 
-            this.hasCreatedIntialStyleSheets = true;
+            this.hasCreatedInitialStyleSheets = true;
         }
 
         return React.createElement(this.managedComponent, this.managedComponentProps());
+    }
+
+    public componentDidMount(): void {
+        if (JSSManager.designSystemIndexes.includes(this.index)) {
+            JSSManager.sheetManager.bulkAttach();
+        }
     }
 
     public componentDidUpdate(prevProps: ManagedJSSProps<T, S, C>): void {
@@ -210,7 +236,7 @@ abstract class JSSManager<T, S, C> extends React.Component<ManagedJSSProps<T, S,
         JSSManager.index++;
 
         // reset style creation tracker in case the instance is re-used
-        this.hasCreatedIntialStyleSheets = false;
+        this.hasCreatedInitialStyleSheets = false;
     }
 
     /**
@@ -274,11 +300,16 @@ abstract class JSSManager<T, S, C> extends React.Component<ManagedJSSProps<T, S,
     private createPropStyleSheet(designSystem: C = this.designSystem): void {
         const stylesheet: any = this.primaryStyleSheet();
 
-        JSSManager.sheetManager.add(this.props.jssStyleSheet, designSystem, {
-            meta: `${this.managedComponent.displayName ||
-                this.managedComponent.name} - jssStyleSheet`,
-            index: stylesheet ? stylesheet.options.index + 1 : this.index + 1,
-        });
+        JSSManager.sheetManager.add(
+            this.props.jssStyleSheet,
+            designSystem,
+            {
+                meta: `${this.managedComponent.displayName ||
+                    this.managedComponent.name} - jssStyleSheet`,
+                index: stylesheet ? stylesheet.options.index + 1 : this.index + 1,
+            },
+            false
+        );
     }
 }
 

@@ -1,6 +1,7 @@
-import { JSSStyleSheet } from "./jss-manager";
-import { ComponentStyles, ComponentStyleSheet } from "@microsoft/fast-jss-manager";
+import { ComponentStyleSheet, ComponentStyles } from "@microsoft/fast-jss-manager";
 import { jss, stylesheetRegistry } from "./jss";
+
+import { JSSStyleSheet } from "./jss-manager";
 
 export type SheetTracker = [JSSStyleSheet, number];
 export type DesignSystemRegistry = WeakMap<object, SheetTracker>;
@@ -23,6 +24,7 @@ export interface JSSSheetOptions {
  */
 export default class SheetManager {
     private registry: SheetRegistry = new WeakMap();
+    private detached: JSSStyleSheet[] = [];
 
     /**
      * Creates a new JSS stylesheet from a stylesheet and design-system.
@@ -32,7 +34,8 @@ export default class SheetManager {
     public add(
         styles: ComponentStyles<unknown, unknown>,
         designSystem: any,
-        options?: JSSSheetOptions
+        options?: JSSSheetOptions,
+        attachImmediately: boolean = true
     ): void {
         const tracker: SheetTracker | void = this.getTracker(styles, designSystem);
 
@@ -51,9 +54,16 @@ export default class SheetManager {
             this.registry.set(styles, designSystemRegistry);
         }
 
-        this.registry
-            .get(styles)
-            .set(designSystem, [this.createStyleSheet(styles, designSystem, options), 1]);
+        const sheet: JSSStyleSheet = this.createStyleSheet(styles, designSystem, options);
+
+        this.registry.get(styles).set(designSystem, [sheet, 1]);
+
+        if (!attachImmediately) {
+            this.detached.push(sheet);
+            return;
+        }
+
+        sheet.attach();
     }
 
     /**
@@ -155,6 +165,20 @@ export default class SheetManager {
     }
 
     /**
+     * Bulk attach style sheets to dom.
+     */
+    public bulkAttach(): void {
+        if (!this.detached.length) {
+            return;
+        }
+
+        this.detached.forEach((sheet: JSSStyleSheet) => {
+            sheet.attach();
+        });
+        this.detached = [];
+    }
+
+    /**
      * Retrieve the sheet tracker tracking the styles and design system
      */
     private getTracker(
@@ -190,7 +214,7 @@ export default class SheetManager {
             ...options,
         });
 
-        sheet.update(designSystem).attach();
+        sheet.update(designSystem);
         stylesheetRegistry.add(sheet);
 
         return sheet;
